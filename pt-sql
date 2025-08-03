@@ -1,0 +1,15 @@
+️# 1-Execution Plan Analizi
+
+-- Sorgunun yürütme planını görmek için
+SET SHOWPLAN_TEXT ON;
+GO
+SELECT * FROM Sales.SalesOrderHeader WHERE CustomerID = 123;
+GO
+SET SHOWPLAN_TEXT OFF;
+
+-- Gerçek zamanlı yürütme planını görmek için
+SET STATISTICS IO ON;
+SET STATISTICS TIME ON;
+SELECT * FROM Sales.SalesOrderHeader WHERE OrderDate > '2024-01-01';
+SET STATISTICS IO OFF;
+SET STATISTICS TIME OFF;
