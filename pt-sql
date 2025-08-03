@@ -1,4 +1,4 @@
-️# 1-Execution Plan Analizi
+️1.Execution Plan Analizi
 
 -- Sorgunun yürütme planını görmek için
 SET SHOWPLAN_TEXT ON;
@@ -13,3 +13,107 @@ SET STATISTICS TIME ON;
 SELECT * FROM Sales.SalesOrderHeader WHERE OrderDate > '2024-01-01';
 SET STATISTICS IO OFF;
 SET STATISTICS TIME OFF;
+
+2. parameter Sniffing Çözümleri
+
+DECLARE @CustomerID INT = 123;
+SELECT * FROM Sales.SalesOrderHeader WHERE CustomerID = @CustomerID
+OPTION (OPTIMIZE FOR UNKNOWN);
+
+SELECT * FROM Sales.SalesOrderHeader WHERE CustomerID = @CustomerID
+OPTION (RECOMPILE);
+
+
+3.TempDB Optimizasyonu (2014 ve öncesi için)
+
+ALTER DATABASE tempdb 
+ADD FILE (NAME = tempdev2, FILENAME = 'D:\\tempdb2.ndf', SIZE = 256MB, FILEGROWTH = 64MB);
+DBCC TRACEON(1117, -1);
+DBCC TRACEON(1118, -1);
+
+
+4.Index Fragmentation ve Fill Factor
+
+SELECT dbschemas.[name] as 'Schema', dbtables.[name] as 'Table',
+indexstats.index_id, dbindexes.[name] as 'Index Name',
+indexstats.avg_fragmentation_in_percent
+FROM sys.dm_db_index_physical_stats (DB_ID(), NULL, NULL, NULL, NULL) AS indexstats
+INNER JOIN sys.tables dbtables ON dbtables.[object_id] = indexstats.[object_id]
+INNER JOIN sys.schemas dbschemas ON dbtables.[schema_id] = dbschemas.[schema_id]
+INNER JOIN sys.indexes AS dbindexes ON dbindexes.[object_id] = indexstats.[object_id]
+    AND indexstats.index_id = dbindexes.index_id
+ORDER BY indexstats.avg_fragmentation_in_percent DESC;
+
+ALTER INDEX ALL ON Sales.SalesOrderHeader REBUILD WITH (FILLFACTOR = 85);
+
+5.Parametreli Dinamik Arama (sp_executesql)
+
+DECLARE @sql NVARCHAR(MAX) = N'SELECT * FROM Sales.SalesOrderHeader WHERE 1=1';
+DECLARE @CustomerID INT = 456;
+
+IF @CustomerID IS NOT NULL
+    SET @sql += N' AND CustomerID = @CustID';
+
+EXEC sp_executesql @sql, N'@CustID INT', @CustID = @CustomerID;
+
+
+6.OPTION (RECOMPILE) ile Tek Seferlik Plan
+
+DECLARE @ProductID INT = 789;
+SELECT * FROM Sales.SalesOrderDetail WHERE ProductID = @ProductID
+OPTION (RECOMPILE);
+
+
+7.1.Memory Grant Feedback
+
+SELECT qs.execution_count, qs.total_spills, qs.total_grant_kb, qs.total_used_grant_kb
+FROM sys.dm_exec_query_stats qs
+CROSS APPLY sys.dm_exec_query_plan(qs.plan_handle) qp
+WHERE qs.total_spills > 0;
+
+
+7.2 Adaptive Join
+
+ALTER DATABASE AdventureWorks SET COMPATIBILITY_LEVEL = 150;
+
+SELECT c.CustomerID, o.SalesOrderID, o.TotalDue
+FROM Sales.Customer c
+INNER JOIN Sales.SalesOrderHeader o ON c.CustomerID = o.CustomerID
+OPTION (USE HINT('DISALLOW_BATCH_MODE_ADAPTIVE_JOINS') OFF);
+
+
+7.3 Batch Mode on Rowstore
+
+ALTER DATABASE SCOPED CONFIGURATION SET BATCH_MODE_ON_ROWSTORE = ON;
+
+SELECT SalesOrderID, SUM(LineTotal) AS TotalSales
+FROM Sales.SalesOrderDetail
+GROUP BY SalesOrderID
+OPTION (QUERYTRACEON 9453);
+
+
+8.Filtered ve Covering Indexes
+
+CREATE NONCLUSTERED INDEX IX_ActiveOrders
+ON Sales.SalesOrderHeader(Status)
+WHERE Status = 'Active';
+
+CREATE NONCLUSTERED INDEX IX_Covering
+ON Sales.SalesOrderHeader(CustomerID)
+INCLUDE (OrderDate, TotalDue);
+
+9.Blocking ve Deadlock Analizi
+
+EXEC sp_whoisactive;
+ALTER DATABASE AdventureWorks SET READ_COMMITTED_SNAPSHOT ON;
+
+
+
+10.Veritabanı İçi Otomatik Sağlık İzleme (DBA Alerts)
+
+SELECT wait_type, SUM(wait_time_ms) AS total_wait
+FROM sys.dm_os_wait_stats
+GROUP BY wait_type
+ORDER BY total_wait DESC;
+
+ALTER INDEX ALL ON Sales.SalesOrderHeader REBUILD;
