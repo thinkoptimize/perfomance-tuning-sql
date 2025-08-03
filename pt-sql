@@ -13,6 +13,7 @@ SET STATISTICS TIME ON;
 SELECT * FROM Sales.SalesOrderHeader WHERE OrderDate > '2024-01-01';
 SET STATISTICS IO OFF;
 SET STATISTICS TIME OFF;
+____________________________________________________________________________________________________________
 
 2. parameter Sniffing Çözümleri
 
@@ -23,6 +24,7 @@ OPTION (OPTIMIZE FOR UNKNOWN);
 SELECT * FROM Sales.SalesOrderHeader WHERE CustomerID = @CustomerID
 OPTION (RECOMPILE);
 
+____________________________________________________________________________________________________________
 
 3.TempDB Optimizasyonu (2014 ve öncesi için)
 
@@ -31,6 +33,7 @@ ADD FILE (NAME = tempdev2, FILENAME = 'D:\\tempdb2.ndf', SIZE = 256MB, FILEGROWT
 DBCC TRACEON(1117, -1);
 DBCC TRACEON(1118, -1);
 
+____________________________________________________________________________________________________________
 
 4.Index Fragmentation ve Fill Factor
 
@@ -45,7 +48,7 @@ INNER JOIN sys.indexes AS dbindexes ON dbindexes.[object_id] = indexstats.[objec
 ORDER BY indexstats.avg_fragmentation_in_percent DESC;
 
 ALTER INDEX ALL ON Sales.SalesOrderHeader REBUILD WITH (FILLFACTOR = 85);
-
+____________________________________________________________________________________________________________
 5.Parametreli Dinamik Arama (sp_executesql)
 
 DECLARE @sql NVARCHAR(MAX) = N'SELECT * FROM Sales.SalesOrderHeader WHERE 1=1';
@@ -56,13 +59,13 @@ IF @CustomerID IS NOT NULL
 
 EXEC sp_executesql @sql, N'@CustID INT', @CustID = @CustomerID;
 
-
+____________________________________________________________________________________________________________
 6.OPTION (RECOMPILE) ile Tek Seferlik Plan
 
 DECLARE @ProductID INT = 789;
 SELECT * FROM Sales.SalesOrderDetail WHERE ProductID = @ProductID
 OPTION (RECOMPILE);
-
+____________________________________________________________________________________________________________
 
 7.1.Memory Grant Feedback
 
@@ -71,7 +74,7 @@ FROM sys.dm_exec_query_stats qs
 CROSS APPLY sys.dm_exec_query_plan(qs.plan_handle) qp
 WHERE qs.total_spills > 0;
 
-
+____________________________________________________________________________________________________________
 7.2 Adaptive Join
 
 ALTER DATABASE AdventureWorks SET COMPATIBILITY_LEVEL = 150;
@@ -81,7 +84,7 @@ FROM Sales.Customer c
 INNER JOIN Sales.SalesOrderHeader o ON c.CustomerID = o.CustomerID
 OPTION (USE HINT('DISALLOW_BATCH_MODE_ADAPTIVE_JOINS') OFF);
 
-
+____________________________________________________________________________________________________________
 7.3 Batch Mode on Rowstore
 
 ALTER DATABASE SCOPED CONFIGURATION SET BATCH_MODE_ON_ROWSTORE = ON;
@@ -91,7 +94,7 @@ FROM Sales.SalesOrderDetail
 GROUP BY SalesOrderID
 OPTION (QUERYTRACEON 9453);
 
-
+____________________________________________________________________________________________________________
 8.Filtered ve Covering Indexes
 
 CREATE NONCLUSTERED INDEX IX_ActiveOrders
@@ -101,13 +104,13 @@ WHERE Status = 'Active';
 CREATE NONCLUSTERED INDEX IX_Covering
 ON Sales.SalesOrderHeader(CustomerID)
 INCLUDE (OrderDate, TotalDue);
-
+____________________________________________________________________________________________________________
 9.Blocking ve Deadlock Analizi
 
 EXEC sp_whoisactive;
 ALTER DATABASE AdventureWorks SET READ_COMMITTED_SNAPSHOT ON;
 
-
+____________________________________________________________________________________________________________
 
 10.Veritabanı İçi Otomatik Sağlık İzleme (DBA Alerts)
 
@@ -117,3 +120,4 @@ GROUP BY wait_type
 ORDER BY total_wait DESC;
 
 ALTER INDEX ALL ON Sales.SalesOrderHeader REBUILD;
+____________________________________________________________________________________________________________
